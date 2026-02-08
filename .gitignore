@@ -1,0 +1,37 @@
+# Gradle files
+.gradle/
+build/
+local.properties
+
+# IntelliJ IDEA
+*.iml
+.idea/
+
+# Android
+/captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+*.apk
+*.aab
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# NDK
+obj/
+.externalNativeBuild/
+
+# Generated files
+bin/
+gen/
+
+# Rust (if building from parent)
+iso2god-rs/target/
+iso2god-rs/Cargo.lock
+
+# Keys and sensitive data
+keys/
+*.jks
+*.keystore

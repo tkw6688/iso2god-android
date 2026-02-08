@@ -1,0 +1,446 @@
+package com.thehbc.iso2god
+
+import android.net.Uri
+import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
+import com.thehbc.iso2god.ui.theme.ISO2GODTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+
+data class IsoInfo(
+    val title: String,
+    val title_id: String,
+    val media_id: String,
+    val platform: String,
+    val exe_type: String,
+    val data_parts: Long,
+    val data_size: Long
+)
+
+class MainActivity : ComponentActivity() {
+    interface ProgressCallback {
+        fun onProgress(current: Int, total: Int, message: String)
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            ISO2GODTheme {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        CenterAlignedTopAppBar(
+                            title = { Text("ISO2GOD Android", fontWeight = FontWeight.Bold) },
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                titleContentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        )
+                    }
+                ) { innerPadding ->
+                    MainScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        activity = this
+                    )
+                }
+            }
+        }
+    }
+
+    external fun helloFromRust(): String
+    external fun testFileIo(fd: Int, outFd: Int): String
+    external fun getIsoInfo(fd: Int): String
+    external fun convertIso(isoFd: Int, headerFd: Int, partFds: IntArray, callback: ProgressCallback): String
+
+    companion object {
+        init {
+            System.loadLibrary("iso2god")
+        }
+    }
+}
+
+@Composable
+fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
+    var statusText by remember { mutableStateOf("请选择要转换的 ISO 文件") }
+    var isoInfo by remember { mutableStateOf<IsoInfo?>(null) }
+    var sourceUri by remember { mutableStateOf<Uri?>(null) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var progressMessage by remember { mutableStateOf("") }
+    var isConverting by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            sourceUri = it
+            statusText = "正在分析 ISO 文件..."
+            isoInfo = null
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openFileDescriptor(it, "r")?.use { pfd ->
+                        val json = activity.getIsoInfo(pfd.fd)
+                        val obj = JSONObject(json)
+                        if (obj.has("error")) {
+                            withContext(Dispatchers.Main) {
+                                statusText = "解析失败: ${obj.getString("error")}"
+                            }
+                        } else {
+                            val info = IsoInfo(
+                                title = obj.getString("title"),
+                                title_id = obj.getString("title_id"),
+                                media_id = obj.getString("media_id"),
+                                platform = obj.getString("platform"),
+                                exe_type = obj.getString("exe_type"),
+                                data_parts = obj.getLong("data_parts"),
+                                data_size = obj.getLong("data_size")
+                            )
+                            withContext(Dispatchers.Main) {
+                                isoInfo = info
+                                statusText = "ISO 分析完成"
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        statusText = "读取 ISO 出错: ${e.message}"
+                    }
+                }
+            }
+        }
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let { treeUri ->
+            if (isoInfo == null || sourceUri == null) return@let
+
+            statusText = "准备开始转换..."
+            isConverting = true
+            progress = 0f
+            progressMessage = "初始化转换任务..."
+
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val info = isoInfo!!
+                    val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
+
+                    val titleDir = rootDoc?.findFile(info.title_id) ?: rootDoc?.createDirectory(info.title_id)
+                    val contentDir = titleDir?.findFile("00007000") ?: titleDir?.createDirectory("00007000")
+
+                    if (contentDir == null) {
+                        withContext(Dispatchers.Main) {
+                            statusText = "无法创建输出目录"
+                            isConverting = false
+                        }
+                        return@launch
+                    }
+
+                    contentDir.findFile(info.media_id)?.delete()
+                    val headerFile = contentDir.createFile("application/octet-stream", info.media_id)
+
+                    val dataDirName = "${info.media_id}.data"
+                    val dataDir = contentDir.findFile(dataDirName) ?: contentDir.createDirectory(dataDirName)
+
+                    if (headerFile == null || dataDir == null) {
+                        withContext(Dispatchers.Main) {
+                            statusText = "创建头部或数据目录失败"
+                            isConverting = false
+                        }
+                        return@launch
+                    }
+
+                    val partFds = IntArray(info.data_parts.toInt())
+                    val partPfds = ArrayList<ParcelFileDescriptor>()
+
+                    try {
+                        withContext(Dispatchers.Main) { progressMessage = "创建数据包中 (${info.data_parts} 个)..." }
+
+                        for (i in 0 until info.data_parts.toInt()) {
+                            val name = "Data%04d".format(i)
+                            dataDir.findFile(name)?.delete()
+                            val partFile = dataDir.createFile("application/octet-stream", name)
+                                ?: throw Exception("无法创建数据包 $i")
+
+                            val pfd = context.contentResolver.openFileDescriptor(partFile.uri, "rw")
+                                ?: throw Exception("无法打开数据包 $i")
+
+                            partPfds.add(pfd)
+                            partFds[i] = pfd.fd
+                        }
+
+                        val isoPfd = context.contentResolver.openFileDescriptor(sourceUri!!, "r")
+                        val headerPfd = context.contentResolver.openFileDescriptor(headerFile.uri, "rw")
+
+                        if (isoPfd != null && headerPfd != null) {
+                            withContext(Dispatchers.Main) { statusText = "正在转换 ISO 为 GOD 格式..." }
+
+                            val callback = object : MainActivity.ProgressCallback {
+                                override fun onProgress(current: Int, total: Int, message: String) {
+                                    val p = if (total > 0) current.toFloat() / total.toFloat() else 0f
+                                    progress = p
+                                    progressMessage = message
+                                }
+                            }
+
+                            val result = activity.convertIso(isoPfd.fd, headerPfd.fd, partFds, callback)
+
+                            withContext(Dispatchers.Main) {
+                                statusText = if (result.contains("Success", ignoreCase = true)) "转换成功！" else "转换结果: $result"
+                                isConverting = false
+                                progress = 1f
+                                progressMessage = "任务已完成"
+                            }
+
+                            isoPfd.close()
+                            headerPfd.close()
+                        }
+
+                    } finally {
+                        partPfds.forEach { it.close() }
+                    }
+
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        statusText = "转换发生错误: ${e.message}"
+                        isConverting = false
+                    }
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 状态卡片
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (isoInfo != null) Icons.Default.CheckCircle else Icons.Default.Info,
+                    contentDescription = null,
+                    tint = if (isoInfo != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ISO 信息卡片
+        AnimatedVisibility(
+            visible = isoInfo != null,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            isoInfo?.let { info ->
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "游戏信息",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        InfoRow(label = "名称", value = info.title)
+                        InfoRow(label = "Title ID", value = info.title_id)
+                        InfoRow(label = "Media ID", value = info.media_id)
+                        InfoRow(label = "大小", value = "%.2f GB".format(info.data_size.toDouble() / (1024 * 1024 * 1024)))
+                        InfoRow(label = "数据包数", value = info.data_parts.toString())
+                    }
+                }
+            }
+        }
+
+        if (isoInfo != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 进度卡片
+        AnimatedVisibility(
+            visible = isConverting || progress > 0f,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "转换进度",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp),
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = progressMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        if (isConverting || progress > 0f) {
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // 操作按钮
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                modifier = Modifier.weight(1f),
+                enabled = !isConverting,
+                contentPadding = PaddingValues(12.dp)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("选择 ISO")
+            }
+
+            Button(
+                onClick = { folderPickerLauncher.launch(null) },
+                modifier = Modifier.weight(1f),
+                enabled = isoInfo != null && !isConverting,
+                contentPadding = PaddingValues(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("开始转换")
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 16.dp)
+        )
+    }
+}
