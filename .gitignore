@@ -12,6 +12,7 @@ local.properties
 .externalNativeBuild/
 .cxx/
 app/build/
+app/release/
 *.apk
 *.aab
 
