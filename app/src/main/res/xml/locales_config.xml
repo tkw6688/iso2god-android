@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  声明本应用支持的语言，让 Android 13+ 的「设置 → 系统 → 语言 → 应用语言」
+  能单独为本应用选择语言（与整机语言互不影响）。
+  这里列出的语言应与 res/values-*/ 目录保持一致。
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="zh" />
+</locale-config>
