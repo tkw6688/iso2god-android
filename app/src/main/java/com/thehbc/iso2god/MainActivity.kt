@@ -73,11 +73,33 @@ data class IsoInfo(
     val title: String,
     val title_id: String,
     val media_id: String,
-    val platform: String,
-    val exe_type: String,
     val data_parts: Long,
     val data_size: Long
 )
+
+/** 进度阶段码，与 android-bridge 里的 ProgressStage 一一对应，改动必须两边同步。 */
+object ProgressStage {
+    const val WRITING_PARTS = 0
+    const val WRITING_MHT = 1
+    const val WRITING_HEADER = 2
+}
+
+/** 失败原因码 → 中文文案。code 由 android-bridge 给出，见其 ErrorCode。 */
+private fun conversionErrorMessage(code: String): String = when (code) {
+    "JNI" -> "调用本地库失败"
+    "ISO_READ" -> "无法读取 ISO（可能不是有效的 Xbox 360 镜像）"
+    "PART_COUNT_MISMATCH" -> "数据包数量与 ISO 不匹配"
+    "WRITE_PART" -> "写入数据包失败"
+    "MHT" -> "写入 MHT 校验链失败"
+    "HEADER" -> "写入数据头失败"
+    else -> "未知错误"
+}
+
+/** 拼出「前缀：中文原因（诊断细节）」。detail 是原生层给的英文技术信息，为空时省略。 */
+private fun failureText(prefix: String, code: String, detail: String): String {
+    val reason = conversionErrorMessage(code)
+    return if (detail.isBlank()) "$prefix：$reason" else "$prefix：$reason（$detail）"
+}
 
 class MainActivity : ComponentActivity() {
     interface ProgressCallback {
@@ -123,8 +145,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    external fun helloFromRust(): String
-    external fun testFileIo(fd: Int, outFd: Int): String
     external fun getIsoInfo(fd: Int): String
     external fun convertIso(isoFd: Int, headerFd: Int, partFds: IntArray, callback: ProgressCallback): String
 
@@ -161,17 +181,20 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                     context.contentResolver.openFileDescriptor(it, "r")?.use { pfd ->
                         val json = activity.getIsoInfo(pfd.fd)
                         val obj = JSONObject(json)
-                        if (obj.has("error")) {
+                        if (!obj.optBoolean("ok", false)) {
+                            val text = failureText(
+                                prefix = "解析失败",
+                                code = obj.optString("code", "UNKNOWN"),
+                                detail = obj.optString("detail", "")
+                            )
                             withContext(Dispatchers.Main) {
-                                statusText = "解析失败: ${obj.getString("error")}"
+                                statusText = text
                             }
                         } else {
                             val info = IsoInfo(
                                 title = obj.getString("title"),
                                 title_id = obj.getString("title_id"),
                                 media_id = obj.getString("media_id"),
-                                platform = obj.getString("platform"),
-                                exe_type = obj.getString("exe_type"),
                                 data_parts = obj.getLong("data_parts"),
                                 data_size = obj.getLong("data_size")
                             )
@@ -271,21 +294,38 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         withContext(Dispatchers.Main) { statusText = "正在转换 ISO 为 GOD 格式..." }
 
                         val callback = object : MainActivity.ProgressCallback {
-                            override fun onProgress(current: Int, total: Int, message: String) {
-                                val p = if (total > 0) current.toFloat() / total.toFloat() else 0f
-                                progress = p
-                                progressMessage = message
+                            override fun onProgress(current: Int, total: Int, stage: Int) {
+                                if (total > 0) {
+                                    // 完成前不显示 100%：后面还有 MHT 与数据头两个阶段
+                                    progress = (current.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
+                                }
+                                progressMessage = when (stage) {
+                                    ProgressStage.WRITING_PARTS -> "正在写入数据包 ${current + 1}/$total…"
+                                    ProgressStage.WRITING_MHT -> "正在计算 MHT 校验链…"
+                                    ProgressStage.WRITING_HEADER -> "正在写入数据头…"
+                                    else -> progressMessage
+                                }
                             }
                         }
 
-                        val result = activity.convertIso(isoPfd.fd, headerPfd.fd, partFds, callback)
+                        val result = JSONObject(activity.convertIso(isoPfd.fd, headerPfd.fd, partFds, callback))
+                        val ok = result.optBoolean("ok", false)
+                        val text = if (ok) {
+                            "转换成功！"
+                        } else {
+                            failureText(
+                                prefix = "转换失败",
+                                code = result.optString("code", "UNKNOWN"),
+                                detail = result.optString("detail", "")
+                            )
+                        }
 
                         withContext(Dispatchers.Main) {
-                            statusText = if (result.contains("Success", ignoreCase = true)) "转换成功！" else "转换结果: $result"
+                            statusText = text
                             isConverting = false
                             showProgress = false
-                            progress = 1f
-                            progressMessage = "任务已完成"
+                            if (ok) progress = 1f
+                            progressMessage = if (ok) "任务已完成" else "任务已中断"
                         }
                     }
 
@@ -358,7 +398,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                        InfoRow(label = "名称", value = info.title)
+                        InfoRow(label = "名称", value = info.title.ifBlank { "未知（未收录）" })
                         InfoRow(label = "Title ID", value = info.title_id)
                         InfoRow(label = "Media ID", value = info.media_id)
                         InfoRow(label = "大小", value = "%.2f GB".format(info.data_size.toDouble() / (1024 * 1024 * 1024)))

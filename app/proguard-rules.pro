@@ -10,11 +10,8 @@
     native <methods>;
 }
 
-# Keep the ProgressCallback interface (used by JNI callback)
+# Keep the ProgressCallback interface：原生层按名字查找 onProgress(III)V
 -keep class com.thehbc.iso2god.MainActivity$ProgressCallback { *; }
-
-# Keep IsoInfo data class (used by JSON parsing)
--keep class com.thehbc.iso2god.IsoInfo { *; }
 
 # Keep MainActivity external methods
 -keep class com.thehbc.iso2god.MainActivity {
