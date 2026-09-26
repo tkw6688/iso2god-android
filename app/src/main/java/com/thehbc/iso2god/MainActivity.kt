@@ -103,7 +103,8 @@ private fun failureText(prefix: String, code: String, detail: String): String {
 
 class MainActivity : ComponentActivity() {
     interface ProgressCallback {
-        fun onProgress(current: Int, total: Int, message: String)
+        // 签名必须与 android-bridge 里的 call_method("onProgress", "(III)V", ...) 一致
+        fun onProgress(current: Int, total: Int, stage: Int)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
