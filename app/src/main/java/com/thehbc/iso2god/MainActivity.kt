@@ -380,6 +380,41 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 操作按钮：紧跟状态卡，下方信息卡的出现/消失不会再推走它们的位置
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                modifier = Modifier.weight(1f),
+                enabled = !isConverting,
+                contentPadding = PaddingValues(12.dp)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("选择 ISO")
+            }
+
+            Button(
+                onClick = { folderPickerLauncher.launch(null) },
+                modifier = Modifier.weight(1f),
+                enabled = isoInfo != null && !isConverting,
+                contentPadding = PaddingValues(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("开始转换")
+            }
+        }
+
+        if (isoInfo != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // ISO 信息卡片
         AnimatedVisibility(
             visible = isoInfo != null,
@@ -409,7 +444,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
             }
         }
 
-        if (isoInfo != null) {
+        if (showProgress) {
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -455,41 +490,6 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         )
                     }
                 }
-            }
-        }
-
-        if (showProgress) {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        // 操作按钮
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-                modifier = Modifier.weight(1f),
-                enabled = !isConverting,
-                contentPadding = PaddingValues(12.dp)
-            ) {
-                Icon(Icons.Default.Search, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("选择 ISO")
-            }
-
-            Button(
-                onClick = { folderPickerLauncher.launch(null) },
-                modifier = Modifier.weight(1f),
-                enabled = isoInfo != null && !isConverting,
-                contentPadding = PaddingValues(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary
-                )
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("开始转换")
             }
         }
     }
