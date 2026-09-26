@@ -131,7 +131,7 @@ pub extern "system" fn Java_com_thehbc_iso2god_MainActivity_convertIso<'local>(
     part_fds: JIntArray<'local>,
     callback: JObject<'local>,
 ) -> JString<'local> {
-    let mut input_file = unsafe { File::from_raw_fd(iso_fd) };
+    let input_file = unsafe { File::from_raw_fd(iso_fd) };
     let mut header_file = unsafe { File::from_raw_fd(header_fd) };
 
     // 取出数组元素（AutoArray 析构时自动归还；NoCopyBack 表示不回写）
