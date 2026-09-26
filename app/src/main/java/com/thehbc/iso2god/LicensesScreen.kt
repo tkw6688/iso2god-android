@@ -52,7 +52,7 @@ import org.json.JSONObject
 
 /**
  * 第三方许可数据，由 tools/generate_android_licenses.py 与
- * tools/generate_rust_licenses.py 生成到 app/src/main/assets/licenses/*.json。
+ * tools/generate_rust_licenses.py 生成到 app/src/main/assets/licenses 目录。
  * 结构（两侧同构）：
  *   { "title": …, "licenses": [{id, name, text}], "entries": [{name, version, licenseIds}] }
  *
