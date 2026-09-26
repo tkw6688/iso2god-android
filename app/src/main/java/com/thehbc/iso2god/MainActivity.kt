@@ -1,5 +1,6 @@
 package com.thehbc.iso2god
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -9,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -59,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -84,21 +87,36 @@ object ProgressStage {
     const val WRITING_HEADER = 2
 }
 
-/** 失败原因码 → 中文文案。code 由 android-bridge 给出，见其 ErrorCode。 */
-private fun conversionErrorMessage(code: String): String = when (code) {
-    "JNI" -> "调用本地库失败"
-    "ISO_READ" -> "无法读取 ISO（可能不是有效的 Xbox 360 镜像）"
-    "PART_COUNT_MISMATCH" -> "数据包数量与 ISO 不匹配"
-    "WRITE_PART" -> "写入数据包失败"
-    "MHT" -> "写入 MHT 校验链失败"
-    "HEADER" -> "写入数据头失败"
-    else -> "未知错误"
-}
+/** 失败原因码 → 文案。code 由 android-bridge 给出，见其 ErrorCode。 */
+private fun conversionErrorMessage(context: Context, code: String): String = context.getString(
+    when (code) {
+        "JNI" -> R.string.error_jni
+        "ISO_READ" -> R.string.error_iso_read
+        "PART_COUNT_MISMATCH" -> R.string.error_part_count_mismatch
+        "WRITE_PART" -> R.string.error_write_part
+        "MHT" -> R.string.error_mht
+        "HEADER" -> R.string.error_header
+        else -> R.string.error_unknown
+    }
+)
 
-/** 拼出「前缀：中文原因（诊断细节）」。detail 是原生层给的英文技术信息，为空时省略。 */
-private fun failureText(prefix: String, code: String, detail: String): String {
-    val reason = conversionErrorMessage(code)
-    return if (detail.isBlank()) "$prefix：$reason" else "$prefix：$reason（$detail）"
+/**
+ * 拼出「前缀：原因（诊断细节）」。detail 是原生层给的英文技术信息，为空时省略括号部分。
+ * 这里不在 Composable 上下文（由协程调用），所以用 context.getString 而非 stringResource。
+ */
+private fun failureText(
+    context: Context,
+    @StringRes prefixRes: Int,
+    code: String,
+    detail: String
+): String {
+    val prefix = context.getString(prefixRes)
+    val reason = conversionErrorMessage(context, code)
+    return if (detail.isBlank()) {
+        context.getString(R.string.failure_format, prefix, reason)
+    } else {
+        context.getString(R.string.failure_format_detail, prefix, reason, detail)
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -127,7 +145,7 @@ class MainActivity : ComponentActivity() {
                             ),
                             actions = {
                                 IconButton(onClick = { showLicenses = true }) {
-                                    Icon(Icons.Default.Info, contentDescription = "开源许可")
+                                    Icon(Icons.Default.Info, contentDescription = stringResource(R.string.licenses_title))
                                 }
                             }
                         )
@@ -158,7 +176,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
-    var statusText by remember { mutableStateOf("请选择要转换的 ISO 文件") }
+    val context = LocalContext.current
+
+    var statusText by remember { mutableStateOf(context.getString(R.string.status_select_iso)) }
     var isoInfo by remember { mutableStateOf<IsoInfo?>(null) }
     var sourceUri by remember { mutableStateOf<Uri?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -166,7 +186,6 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
     var isConverting by remember { mutableStateOf(false) }
     var showProgress by remember { mutableStateOf(false) }
 
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
@@ -175,7 +194,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
     ) { uri: Uri? ->
         uri?.let {
             sourceUri = it
-            statusText = "正在分析 ISO 文件..."
+            statusText = context.getString(R.string.status_analyzing)
             isoInfo = null
             scope.launch(Dispatchers.IO) {
                 try {
@@ -184,7 +203,8 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         val obj = JSONObject(json)
                         if (!obj.optBoolean("ok", false)) {
                             val text = failureText(
-                                prefix = "解析失败",
+                                context = context,
+                                prefixRes = R.string.failure_prefix_analyze,
                                 code = obj.optString("code", "UNKNOWN"),
                                 detail = obj.optString("detail", "")
                             )
@@ -201,13 +221,13 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                             )
                             withContext(Dispatchers.Main) {
                                 isoInfo = info
-                                statusText = "ISO 分析完成"
+                                statusText = context.getString(R.string.status_analyzed)
                             }
                         }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        statusText = "读取 ISO 出错: ${e.message}"
+                        statusText = context.getString(R.string.status_read_error, e.message)
                     }
                 }
             }
@@ -230,11 +250,11 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                 // Some providers don't support persistable permissions; proceed anyway
             }
 
-            statusText = "准备开始转换..."
+            statusText = context.getString(R.string.status_preparing)
             isConverting = true
             showProgress = true
             progress = 0f
-            progressMessage = "初始化转换任务..."
+            progressMessage = context.getString(R.string.progress_init)
 
             scope.launch(Dispatchers.IO) {
                 var isoPfd: ParcelFileDescriptor? = null
@@ -249,7 +269,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
 
                     if (contentDir == null) {
                         withContext(Dispatchers.Main) {
-                            statusText = "无法创建输出目录"
+                            statusText = context.getString(R.string.status_create_output_dir_failed)
                             isConverting = false
                             showProgress = false
                         }
@@ -264,7 +284,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
 
                     if (headerFile == null || dataDir == null) {
                         withContext(Dispatchers.Main) {
-                            statusText = "创建头部或数据目录失败"
+                            statusText = context.getString(R.string.status_create_header_failed)
                             isConverting = false
                             showProgress = false
                         }
@@ -273,16 +293,18 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
 
                     val partFds = IntArray(info.data_parts.toInt())
 
-                    withContext(Dispatchers.Main) { progressMessage = "创建数据包中 (${info.data_parts} 个)..." }
+                    withContext(Dispatchers.Main) {
+                        progressMessage = context.getString(R.string.progress_creating_parts, info.data_parts)
+                    }
 
                     for (i in 0 until info.data_parts.toInt()) {
                         val name = "Data%04d".format(i)
                         dataDir.findFile(name)?.delete()
                         val partFile = dataDir.createFile("application/octet-stream", name)
-                            ?: throw Exception("无法创建数据包 $i")
+                            ?: throw Exception(context.getString(R.string.error_create_part, i))
 
                         val pfd = context.contentResolver.openFileDescriptor(partFile.uri, "rw")
-                            ?: throw Exception("无法打开数据包 $i")
+                            ?: throw Exception(context.getString(R.string.error_open_part, i))
 
                         partPfds.add(pfd)
                         partFds[i] = pfd.fd
@@ -292,7 +314,9 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                     headerPfd = context.contentResolver.openFileDescriptor(headerFile.uri, "rw")
 
                     if (isoPfd != null && headerPfd != null) {
-                        withContext(Dispatchers.Main) { statusText = "正在转换 ISO 为 GOD 格式..." }
+                        withContext(Dispatchers.Main) {
+                            statusText = context.getString(R.string.status_converting)
+                        }
 
                         val callback = object : MainActivity.ProgressCallback {
                             override fun onProgress(current: Int, total: Int, stage: Int) {
@@ -301,9 +325,14 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                                     progress = (current.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
                                 }
                                 progressMessage = when (stage) {
-                                    ProgressStage.WRITING_PARTS -> "正在写入数据包 ${current + 1}/$total…"
-                                    ProgressStage.WRITING_MHT -> "正在计算 MHT 校验链…"
-                                    ProgressStage.WRITING_HEADER -> "正在写入数据头…"
+                                    ProgressStage.WRITING_PARTS -> context.getString(
+                                        R.string.progress_writing_part,
+                                        current + 1,
+                                        total
+                                    )
+
+                                    ProgressStage.WRITING_MHT -> context.getString(R.string.progress_writing_mht)
+                                    ProgressStage.WRITING_HEADER -> context.getString(R.string.progress_writing_header)
                                     else -> progressMessage
                                 }
                             }
@@ -312,10 +341,11 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         val result = JSONObject(activity.convertIso(isoPfd.fd, headerPfd.fd, partFds, callback))
                         val ok = result.optBoolean("ok", false)
                         val text = if (ok) {
-                            "转换成功！"
+                            context.getString(R.string.result_success)
                         } else {
                             failureText(
-                                prefix = "转换失败",
+                                context = context,
+                                prefixRes = R.string.failure_prefix_convert,
                                 code = result.optString("code", "UNKNOWN"),
                                 detail = result.optString("detail", "")
                             )
@@ -326,13 +356,17 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                             isConverting = false
                             showProgress = false
                             if (ok) progress = 1f
-                            progressMessage = if (ok) "任务已完成" else "任务已中断"
+                            progressMessage = if (ok) {
+                                context.getString(R.string.progress_done)
+                            } else {
+                                context.getString(R.string.progress_aborted)
+                            }
                         }
                     }
 
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        statusText = "转换发生错误: ${e.message}"
+                        statusText = context.getString(R.string.status_convert_error, e.message)
                         isConverting = false
                         showProgress = false
                     }
@@ -393,7 +427,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
             ) {
                 Icon(Icons.Default.Search, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("选择 ISO")
+                Text(stringResource(R.string.action_select_iso))
             }
 
             Button(
@@ -407,7 +441,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("开始转换")
+                Text(stringResource(R.string.action_start_conversion))
             }
         }
 
@@ -427,18 +461,29 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "游戏信息",
+                            text = stringResource(R.string.info_card_title),
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                        InfoRow(label = "名称", value = info.title.ifBlank { "未知（未收录）" })
-                        InfoRow(label = "Title ID", value = info.title_id)
-                        InfoRow(label = "Media ID", value = info.media_id)
-                        InfoRow(label = "大小", value = "%.2f GB".format(info.data_size.toDouble() / (1024 * 1024 * 1024)))
-                        InfoRow(label = "数据包数", value = info.data_parts.toString())
+                        // ifBlank 的 lambda 不是 Composable 上下文，先取出来再传
+                        val unknownTitle = stringResource(R.string.title_unknown)
+                        InfoRow(
+                            label = stringResource(R.string.label_name),
+                            value = info.title.ifBlank { unknownTitle }
+                        )
+                        InfoRow(label = stringResource(R.string.label_title_id), value = info.title_id)
+                        InfoRow(label = stringResource(R.string.label_media_id), value = info.media_id)
+                        InfoRow(
+                            label = stringResource(R.string.label_size),
+                            value = stringResource(
+                                R.string.size_gb,
+                                info.data_size.toDouble() / (1024 * 1024 * 1024)
+                            )
+                        )
+                        InfoRow(label = stringResource(R.string.label_data_parts), value = info.data_parts.toString())
                     }
                 }
             }
@@ -459,7 +504,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "转换进度",
+                        text = stringResource(R.string.progress_card_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -542,7 +587,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("开源许可", fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.licenses_title), fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
@@ -550,7 +595,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "本应用（ISO2GOD Android）以 MIT 许可发布。随应用一起分发的第三方组件及其许可声明如下：",
+                    text = stringResource(R.string.licenses_intro),
                     style = MaterialTheme.typography.bodySmall
                 )
                 entries.forEach { (name, text) ->
@@ -570,7 +615,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         }
     )
 }

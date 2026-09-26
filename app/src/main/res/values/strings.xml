@@ -1,3 +1,63 @@
 <resources>
     <string name="app_name">ISO2GOD</string>
+
+    <!-- 状态卡 -->
+    <string name="status_select_iso">请选择要转换的 ISO 文件</string>
+    <string name="status_analyzing">正在分析 ISO 文件...</string>
+    <string name="status_analyzed">ISO 分析完成</string>
+    <string name="status_read_error">读取 ISO 出错: %1$s</string>
+    <string name="status_preparing">准备开始转换...</string>
+    <string name="status_converting">正在转换 ISO 为 GOD 格式...</string>
+    <string name="status_convert_error">转换发生错误: %1$s</string>
+    <string name="status_create_output_dir_failed">无法创建输出目录</string>
+    <string name="status_create_header_failed">创建头部或数据目录失败</string>
+
+    <!-- 进度卡 -->
+    <string name="progress_card_title">转换进度</string>
+    <string name="progress_init">初始化转换任务...</string>
+    <string name="progress_creating_parts">创建数据包中 (%1$d 个)...</string>
+    <string name="progress_writing_part">正在写入数据包 %1$d/%2$d…</string>
+    <string name="progress_writing_mht">正在计算 MHT 校验链…</string>
+    <string name="progress_writing_header">正在写入数据头…</string>
+    <string name="progress_done">任务已完成</string>
+    <string name="progress_aborted">任务已中断</string>
+
+    <!-- 转换结果：失败时拼成「前缀：原因（诊断细节）」，detail 为空则省略括号部分 -->
+    <string name="result_success">转换成功！</string>
+    <string name="failure_prefix_analyze">解析失败</string>
+    <string name="failure_prefix_convert">转换失败</string>
+    <string name="failure_format">%1$s：%2$s</string>
+    <string name="failure_format_detail">%1$s：%2$s（%3$s）</string>
+
+    <!-- 失败原因，code 见 android-bridge 的 ErrorCode -->
+    <string name="error_jni">调用本地库失败</string>
+    <string name="error_iso_read">无法读取 ISO（可能不是有效的 Xbox 360 镜像）</string>
+    <string name="error_part_count_mismatch">数据包数量与 ISO 不匹配</string>
+    <string name="error_write_part">写入数据包失败</string>
+    <string name="error_mht">写入 MHT 校验链失败</string>
+    <string name="error_header">写入数据头失败</string>
+    <string name="error_unknown">未知错误</string>
+
+    <!-- 转换途中抛出、最终会被展示给用户的异常 -->
+    <string name="error_create_part">无法创建数据包 %1$d</string>
+    <string name="error_open_part">无法打开数据包 %1$d</string>
+
+    <!-- 游戏信息卡 -->
+    <string name="info_card_title">游戏信息</string>
+    <string name="label_name">名称</string>
+    <string name="label_title_id">Title ID</string>
+    <string name="label_media_id">Media ID</string>
+    <string name="label_size">大小</string>
+    <string name="label_data_parts">数据包数</string>
+    <string name="title_unknown">未知（未收录）</string>
+    <string name="size_gb">%1$.2f GB</string>
+
+    <!-- 操作按钮 -->
+    <string name="action_select_iso">选择 ISO</string>
+    <string name="action_start_conversion">开始转换</string>
+
+    <!-- 开源许可 -->
+    <string name="licenses_title">开源许可</string>
+    <string name="licenses_intro">本应用（ISO2GOD Android）以 MIT 许可发布。随应用一起分发的第三方组件及其许可声明如下：</string>
+    <string name="action_close">关闭</string>
 </resources>
