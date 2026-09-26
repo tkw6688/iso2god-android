@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
                 var showLicenses by remember { mutableStateOf(false) }
 
                 if (showLicenses) {
-                    // 许可页自带 Scaffold 与返回箭头（分组 → 组件 → 许可全文）
+                    // 许可页自带 Scaffold 与返回箭头（单页 credits 式）
                     LicensesScreen(onClose = { showLicenses = false })
                 } else {
                     Scaffold(

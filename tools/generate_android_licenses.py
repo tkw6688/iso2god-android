@@ -6,8 +6,8 @@ Maven 依赖列表（含传递依赖），由构建自动更新，不需要手�
 
     app/build/outputs/sdk-dependencies/<variant>/sdkDependencies.txt
 
-输出为结构化 JSON（供应用内许可页分级展示），结构见 README「第三方许可清单」：
-    { "title", "licenses": [{id, name, text}], "entries": [{name, version, licenseIds}] }
+输出为结构化 JSON（供应用内许可页单页展示），结构见 README「第三方许可清单」：
+    { "licenses": [{name, text, components: [{name, version}]}] }
 
 用法（在仓库根目录）：
     python tools/generate_android_licenses.py
@@ -24,8 +24,6 @@ REPO = Path(__file__).resolve().parent.parent
 SDK_DEPS = REPO / "app/build/outputs/sdk-dependencies/release/sdkDependencies.txt"
 APACHE_TEXT = REPO / "tools/apache-2.0.txt"
 OUTPUT = REPO / "app/src/main/assets/licenses/android-dependencies.json"
-
-APACHE_ID = "Apache-2.0"
 
 
 def main() -> int:
@@ -45,24 +43,22 @@ def main() -> int:
         return 1
 
     data = {
-        "title": "Android dependencies",
         "licenses": [
             {
-                "id": APACHE_ID,
                 "name": "Apache License 2.0",
                 "text": APACHE_TEXT.read_text(encoding="utf-8"),
+                # 名称与版本分开存放，便于界面把版本显示成次要信息
+                "components": [
+                    {"name": f"{group}:{artifact}", "version": version}
+                    for group, artifact, version in coords
+                ],
             }
-        ],
-        "entries": [
-            # 名称与版本分开存放，便于界面把版本显示成次要信息
-            {"name": f"{group}:{artifact}", "version": version, "licenseIds": [APACHE_ID]}
-            for group, artifact, version in coords
         ],
     }
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"已写入 {OUTPUT.relative_to(REPO)}（{len(data['entries'])} 个组件）")
+    print(f"已写入 {OUTPUT.relative_to(REPO)}（{len(coords)} 个组件）")
     return 0
 
 

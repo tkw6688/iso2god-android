@@ -52,7 +52,7 @@ app/src/main/jniLibs/  构建出的 libiso2god.so
 
 ### 第三方许可清单
 
-应用内「开源许可」页按 `app/src/main/assets/licenses/*.json` 分级展示：分组 → 组件（可搜索）→ 许可全文。两份数据都由脚本从真实依赖图生成，依赖变化后重跑即可：
+应用内「开源许可」页为单页 credits 式：按 `app/src/main/assets/licenses/*.json` 里的许可分节，每节列出适用组件（名称 · 版本，` · ` 连接成段）、版权行（如有），随后附许可全文，可长按复制。两份数据都由脚本从真实依赖图生成，依赖变化后重跑即可：
 
 | 文件 | 内容 | 重新生成方式 |
 |---|---|---|
@@ -62,11 +62,11 @@ app/src/main/jniLibs/  构建出的 libiso2god.so
 两侧数据同构，便于界面统一渲染：
 
 ```json
-{ "title": "…", "licenses": [{ "id": "…", "name": "…", "text": "…" }],
-  "entries": [{ "name": "…", "version": "…", "licenseIds": ["…"] }] }
+{ "licenses": [{ "name": "…", "text": "…", "copyrights": ["…"],
+                 "components": [{ "name": "…", "version": "…" }] }] }
 ```
 
-许可正文按 `id` 去重存放，条目只引用 id——否则上百个组件各带一份 Apache-2.0 全文会让资源膨胀上百倍。
+`copyrights` 可省略。Rust 侧的许可正文按（许可名，去声明头后的正文）归并——各 crate 的 MIT 文件只差标题行、版权行与换行宽度，归并后全文只存一份，各家的版权行集中放进 `copyrights`；双许可 crate（如 `unicode-ident` 的 `MIT OR Unicode-3.0`）会出现在对应的多个许可节里。
 
 Rust 侧首次需安装生成工具（之后由脚本自动调用）：
 
