@@ -50,5 +50,25 @@ app/src/main/jniLibs/  构建出的 libiso2god.so
 由 `android-bridge/` 以 git 依赖、按 rev 锁定上游 v1.8.0 使用，本仓库不再存放其源码副本。
 该内核的许可原文随 APK 一起分发到 `app/src/main/assets/licenses/iso2god-rs.txt`，在应用内「开源许可」中可查看。
 
-> 尚未覆盖：AndroidX / Compose / Material（Apache-2.0）以及 Rust 依赖（多为 MIT OR Apache-2.0）的完整许可清单。
-> 后续可用 `aboutlibraries` Gradle 插件或 `cargo-about` 生成后放入 `app/src/main/assets/licenses/` —— 该目录会被应用内许可页自动列出，无需改代码。
+### 第三方许可清单
+
+应用内「开源许可」页会自动列出 `app/src/main/assets/licenses/` 下的所有文件，所以维护清单 = 重新生成对应文件：
+
+| 文件 | 内容 | 重新生成方式 |
+|---|---|---|
+| `iso2god-rs.txt` | 转换内核的 MIT 原文 | 手工维护（上游 LICENSE 的副本） |
+| `android-dependencies.txt` | 打包进 APK 的全部 Maven 依赖（含传递依赖）+ Apache-2.0 全文 | `python tools/generate_android_licenses.py` |
+| `rust-dependencies.txt` | 静态链接进 `libiso2god.so` 的 Rust 依赖 | 见下 |
+
+依赖变化后（改 `Cargo.toml`、更新上游 rev、增删 Gradle 依赖）重跑上表对应命令即可。
+
+Rust 侧首次需装工具，之后每次生成：
+
+```bash
+cargo install --locked --features cli cargo-about
+
+cd android-bridge
+cargo about generate -o ../app/src/main/assets/licenses/rust-dependencies.txt about.hbs
+```
+
+配置位于 `android-bridge/about.toml`（接受的许可白名单、上游 crate 的 license 澄清）与 `android-bridge/about.hbs`（纯文本模板）。

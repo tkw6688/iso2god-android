@@ -1,0 +1,16 @@
+Third-party Rust components
+===========================
+
+本文件由 cargo-about 生成，列出静态链接进 libiso2god.so 的 Rust 依赖及其许可原文。
+重新生成方式见仓库根目录 README 的「第三方许可清单」一节。
+
+{{#each licenses}}
+--------------------------------------------------------------------------------
+{{name}}
+Applicable to / 适用于:
+{{#each used_by}}
+  {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{{text}}}
+{{/each}}

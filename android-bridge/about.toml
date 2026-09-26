@@ -1,0 +1,34 @@
+# cargo-about 配置：生成随 APK 分发的 Rust 依赖许可清单。
+# 用法见仓库根目录 README 的「第三方许可清单」一节。
+#
+# 注意：accepted 是 cargo-about 的顶层键，不是 [licenses] 段。
+
+# 只统计真正会进 libiso2god.so 的依赖，避免混入 Windows 等其它目标的 crate
+targets = ["aarch64-linux-android"]
+
+# 接受的许可白名单。清单里出现白名单之外的许可时 cargo-about 会报错，
+# 这是有意的——新依赖引入新许可时应当被注意到。
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "Unlicense",
+    "Unicode-3.0",
+    "Zlib",
+    "ISC",
+    "0BSD",
+]
+
+# 构建脚本与测试依赖不会链接进二进制
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+
+# 本项目自身（publish = false）不属于第三方组件
+private = { ignore = true }
+
+# 上游 iso2god 的 Cargo.toml 没有声明 license 字段。其仓库以 MIT 分发
+# （原文见 app/src/main/assets/licenses/iso2god-rs.txt），这里显式补上许可表达式，
+# 正文由 cargo-about 从该 crate 源码中的 LICENSE 文件读取。
+# crate 专属配置必须放在文件最后。
+[iso2god]
+clarify = { license = "MIT" }
