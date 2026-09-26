@@ -26,9 +26,17 @@ ignore-dev-dependencies = true
 # 本项目自身（publish = false）不属于第三方组件
 private = { ignore = true }
 
-# 上游 iso2god 的 Cargo.toml 没有声明 license 字段。其仓库以 MIT 分发
-# （原文见 app/src/main/assets/licenses/iso2god-rs.txt），这里显式补上许可表达式，
-# 正文由 cargo-about 从该 crate 源码中的 LICENSE 文件读取。
-# crate 专属配置必须放在文件最后。
-[iso2god]
-clarify = { license = "MIT" }
+# 上游 iso2god 的 Cargo.toml 没有声明 license 字段（只有 name/version/description/
+# repository/edition），因此必须在这里澄清，否则 cargo-about 直接报错。
+# crate 专属配置必须放在文件最后，且 clarify 只能写成子表——内联表无法再追加
+# [[...files]]，会被 TOML 拒绝。
+#
+# checksum 是上游仓库 LICENSE 文件的 sha-256（1072 字节；与应用内 assets/licenses/
+# iso2god-rs.txt 逐字节一致）。若上游换用其它 LICENSE 文件，这里必须同步更新，
+# 校验和不匹配时 cargo-about 会忽略该澄清并报错。
+[iso2god.clarify]
+license = "MIT"
+
+[[iso2god.clarify.files]]
+path = "LICENSE"
+checksum = "5db9fd9302f45c0c550564d5b276d3fca24c72f861dd96e5743a99e2b2b56fc1"
