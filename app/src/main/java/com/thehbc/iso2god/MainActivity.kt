@@ -1,5 +1,6 @@
 package com.thehbc.iso2god
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
@@ -125,6 +126,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
     var progress by remember { mutableFloatStateOf(0f) }
     var progressMessage by remember { mutableStateOf("") }
     var isConverting by remember { mutableStateOf(false) }
+    var showProgress by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -175,16 +177,30 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         uri?.let { treeUri ->
-            if (isoInfo == null || sourceUri == null) return@let
+            val info = isoInfo ?: return@let
+            val srcUri = sourceUri ?: return@let
+
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // Some providers don't support persistable permissions; proceed anyway
+            }
 
             statusText = "准备开始转换..."
             isConverting = true
+            showProgress = true
             progress = 0f
             progressMessage = "初始化转换任务..."
 
             scope.launch(Dispatchers.IO) {
+                var isoPfd: ParcelFileDescriptor? = null
+                var headerPfd: ParcelFileDescriptor? = null
+                val partPfds = ArrayList<ParcelFileDescriptor>()
+
                 try {
-                    val info = isoInfo!!
                     val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
 
                     val titleDir = rootDoc?.findFile(info.title_id) ?: rootDoc?.createDirectory(info.title_id)
@@ -194,6 +210,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         withContext(Dispatchers.Main) {
                             statusText = "无法创建输出目录"
                             isConverting = false
+                            showProgress = false
                         }
                         return@launch
                     }
@@ -208,66 +225,64 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
                         withContext(Dispatchers.Main) {
                             statusText = "创建头部或数据目录失败"
                             isConverting = false
+                            showProgress = false
                         }
                         return@launch
                     }
 
                     val partFds = IntArray(info.data_parts.toInt())
-                    val partPfds = ArrayList<ParcelFileDescriptor>()
 
-                    try {
-                        withContext(Dispatchers.Main) { progressMessage = "创建数据包中 (${info.data_parts} 个)..." }
+                    withContext(Dispatchers.Main) { progressMessage = "创建数据包中 (${info.data_parts} 个)..." }
 
-                        for (i in 0 until info.data_parts.toInt()) {
-                            val name = "Data%04d".format(i)
-                            dataDir.findFile(name)?.delete()
-                            val partFile = dataDir.createFile("application/octet-stream", name)
-                                ?: throw Exception("无法创建数据包 $i")
+                    for (i in 0 until info.data_parts.toInt()) {
+                        val name = "Data%04d".format(i)
+                        dataDir.findFile(name)?.delete()
+                        val partFile = dataDir.createFile("application/octet-stream", name)
+                            ?: throw Exception("无法创建数据包 $i")
 
-                            val pfd = context.contentResolver.openFileDescriptor(partFile.uri, "rw")
-                                ?: throw Exception("无法打开数据包 $i")
+                        val pfd = context.contentResolver.openFileDescriptor(partFile.uri, "rw")
+                            ?: throw Exception("无法打开数据包 $i")
 
-                            partPfds.add(pfd)
-                            partFds[i] = pfd.fd
+                        partPfds.add(pfd)
+                        partFds[i] = pfd.fd
+                    }
+
+                    isoPfd = context.contentResolver.openFileDescriptor(srcUri, "r")
+                    headerPfd = context.contentResolver.openFileDescriptor(headerFile.uri, "rw")
+
+                    if (isoPfd != null && headerPfd != null) {
+                        withContext(Dispatchers.Main) { statusText = "正在转换 ISO 为 GOD 格式..." }
+
+                        val callback = object : MainActivity.ProgressCallback {
+                            override fun onProgress(current: Int, total: Int, message: String) {
+                                val p = if (total > 0) current.toFloat() / total.toFloat() else 0f
+                                progress = p
+                                progressMessage = message
+                            }
                         }
 
-                        val isoPfd = context.contentResolver.openFileDescriptor(sourceUri!!, "r")
-                        val headerPfd = context.contentResolver.openFileDescriptor(headerFile.uri, "rw")
+                        val result = activity.convertIso(isoPfd.fd, headerPfd.fd, partFds, callback)
 
-                        if (isoPfd != null && headerPfd != null) {
-                            withContext(Dispatchers.Main) { statusText = "正在转换 ISO 为 GOD 格式..." }
-
-                            val callback = object : MainActivity.ProgressCallback {
-                                override fun onProgress(current: Int, total: Int, message: String) {
-                                    val p = if (total > 0) current.toFloat() / total.toFloat() else 0f
-                                    progress = p
-                                    progressMessage = message
-                                }
-                            }
-
-                            val result = activity.convertIso(isoPfd.fd, headerPfd.fd, partFds, callback)
-
-                            withContext(Dispatchers.Main) {
-                                statusText = if (result.contains("Success", ignoreCase = true)) "转换成功！" else "转换结果: $result"
-                                isConverting = false
-                                progress = 1f
-                                progressMessage = "任务已完成"
-                            }
-
-                            isoPfd.close()
-                            headerPfd.close()
+                        withContext(Dispatchers.Main) {
+                            statusText = if (result.contains("Success", ignoreCase = true)) "转换成功！" else "转换结果: $result"
+                            isConverting = false
+                            showProgress = false
+                            progress = 1f
+                            progressMessage = "任务已完成"
                         }
-
-                    } finally {
-                        partPfds.forEach { it.close() }
                     }
 
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         statusText = "转换发生错误: ${e.message}"
                         isConverting = false
+                        showProgress = false
                     }
                     e.printStackTrace()
+                } finally {
+                    isoPfd?.close()
+                    headerPfd?.close()
+                    partPfds.forEach { it.close() }
                 }
             }
         }
@@ -342,7 +357,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
 
         // 进度卡片
         AnimatedVisibility(
-            visible = isConverting || progress > 0f,
+            visible = showProgress,
             enter = expandVertically() + fadeIn(),
             exit = shrinkVertically() + fadeOut()
         ) {
@@ -385,7 +400,7 @@ fun MainScreen(modifier: Modifier = Modifier, activity: MainActivity) {
             }
         }
 
-        if (isConverting || progress > 0f) {
+        if (showProgress) {
             Spacer(modifier = Modifier.height(24.dp))
         }
 
