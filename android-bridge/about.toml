@@ -31,8 +31,8 @@ private = { ignore = true }
 # crate 专属配置必须放在文件最后，且 clarify 只能写成子表——内联表无法再追加
 # [[...files]]，会被 TOML 拒绝。
 #
-# checksum 是上游仓库 LICENSE 文件的 sha-256（1072 字节；与应用内 assets/licenses/
-# iso2god-rs.txt 逐字节一致）。若上游换用其它 LICENSE 文件，这里必须同步更新，
+# checksum 是上游仓库 LICENSE 文件的 sha-256（1072 字节）。若上游换用其它 LICENSE
+# 文件，这里必须同步更新，
 # 校验和不匹配时 cargo-about 会忽略该澄清并报错。
 [iso2god.clarify]
 license = "MIT"

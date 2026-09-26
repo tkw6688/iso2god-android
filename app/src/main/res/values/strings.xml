@@ -64,5 +64,8 @@
     <!-- 开源许可 -->
     <string name="licenses_title">Open source licenses</string>
     <string name="licenses_intro">This app (ISO2GOD Android) is released under the MIT License. The license notices for the third-party components distributed with it are listed below:</string>
-    <string name="action_close">Close</string>
+    <string name="licenses_group_summary">%1$d components · %2$d licenses</string>
+    <string name="licenses_search_hint">Search components</string>
+    <string name="licenses_no_results">No matching components</string>
+    <string name="action_back">Back</string>
 </resources>

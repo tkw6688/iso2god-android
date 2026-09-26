@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -48,13 +46,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -133,32 +129,36 @@ class MainActivity : ComponentActivity() {
             ISO2GODTheme {
                 var showLicenses by remember { mutableStateOf(false) }
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    topBar = {
-                        CenterAlignedTopAppBar(
-                            title = { Text("ISO2GOD Android", fontWeight = FontWeight.Bold) },
-                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                                actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            actions = {
-                                IconButton(onClick = { showLicenses = true }) {
-                                    Icon(Icons.Default.Info, contentDescription = stringResource(R.string.licenses_title))
+                if (showLicenses) {
+                    // 许可页自带 Scaffold 与返回箭头（分组 → 组件 → 许可全文）
+                    LicensesScreen(onClose = { showLicenses = false })
+                } else {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        topBar = {
+                            CenterAlignedTopAppBar(
+                                title = { Text("ISO2GOD Android", fontWeight = FontWeight.Bold) },
+                                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                actions = {
+                                    IconButton(onClick = { showLicenses = true }) {
+                                        Icon(
+                                            Icons.Default.Info,
+                                            contentDescription = stringResource(R.string.licenses_title)
+                                        )
+                                    }
                                 }
-                            }
+                            )
+                        }
+                    ) { innerPadding ->
+                        MainScreen(
+                            modifier = Modifier.padding(innerPadding),
+                            activity = this
                         )
                     }
-                ) { innerPadding ->
-                    MainScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        activity = this
-                    )
-                }
-
-                if (showLicenses) {
-                    LicensesDialog(onDismiss = { showLicenses = false })
                 }
             }
         }
@@ -561,61 +561,4 @@ fun InfoRow(label: String, value: String) {
             modifier = Modifier.padding(start = 16.dp)
         )
     }
-}
-
-/**
- * 列出 assets/licenses/ 下随应用分发的第三方许可原文。
- * 新增许可只需往该目录放一个 .txt 文件，无需改动本文件。
- */
-@Composable
-fun LicensesDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val entries by produceState(initialValue = emptyList<Pair<String, String>>()) {
-        value = withContext(Dispatchers.IO) {
-            try {
-                val assets = context.assets
-                assets.list("licenses")?.sorted()?.mapNotNull { name ->
-                    assets.open("licenses/$name").bufferedReader().use { reader ->
-                        name.substringBeforeLast('.') to reader.readText()
-                    }
-                } ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.licenses_title), fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    text = stringResource(R.string.licenses_intro),
-                    style = MaterialTheme.typography.bodySmall
-                )
-                entries.forEach { (name, text) ->
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = text.trim(),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
-        }
-    )
 }
